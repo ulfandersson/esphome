@@ -29,6 +29,7 @@ SUPPORTED_MODELS = {
     "yaa",
     "yac",
     "yac1fb9",
+    "yag1fb3",
 }
 
 CONFIG_SCHEMA = cv.Schema(

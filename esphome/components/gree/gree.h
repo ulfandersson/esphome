@@ -77,7 +77,7 @@ static constexpr uint8_t GREE_PRESET_SLEEP = 0x01;
 static constexpr uint8_t GREE_PRESET_SLEEP_BIT = 0x80;
 
 // Model codes
-enum Model { GREE_GENERIC, GREE_YAN, GREE_YAA, GREE_YAC, GREE_YAC1FB9, GREE_YX1FF, GREE_YAG };
+enum Model { GREE_GENERIC, GREE_YAN, GREE_YAA, GREE_YAC, GREE_YAC1FB9, GREE_YX1FF, GREE_YAG, GREE_YAG1FB3 };
 
 class GreeClimate final : public climate_ir::ClimateIR {
  public:
@@ -87,6 +87,7 @@ class GreeClimate final : public climate_ir::ClimateIR {
                                climate::CLIMATE_FAN_HIGH},
                               {climate::CLIMATE_SWING_OFF, climate::CLIMATE_SWING_VERTICAL,
                                climate::CLIMATE_SWING_HORIZONTAL, climate::CLIMATE_SWING_BOTH}) {}
+  void setup() override;
 
   void set_model(Model model);
   void set_mode_bit(uint8_t bit_mask, bool enabled);
@@ -95,6 +96,18 @@ class GreeClimate final : public climate_ir::ClimateIR {
   // Transmit via IR the state of this climate controller.
   void transmit_state() override;
   climate::ClimateTraits traits() override;
+
+  bool on_receive(remote_base::RemoteReceiveData data) override;
+
+  void import_state_(uint8_t *remote_state);
+
+  void encodeData_(remote_base::RemoteTransmitData *data, uint8_t *remote_state);
+
+  uint8_t get_sensor_temp_();
+
+  void encodeIFeel_(remote_base::RemoteTransmitData *data, uint8_t temperature);
+
+  void send_ifeel_ping_(bool force);
 
   uint8_t operation_mode_();
   uint8_t fan_speed_();
@@ -105,6 +118,7 @@ class GreeClimate final : public climate_ir::ClimateIR {
 
   Model model_{};
   uint8_t mode_bits_{0};  // Combined mode bits for remote_state[2]
+  uint8_t last_sent_temp_{0};
 };
 
 }  // namespace esphome::gree
