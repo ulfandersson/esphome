@@ -13,7 +13,7 @@ GreeClimate = gree_ns.class_("GreeClimate", climate_ir.ClimateIR)
 
 Model = gree_ns.enum("Model")
 MODELS = Model.options(
-    "generic", "yan", "yaa", "yac", "yac1fb9", "yx1ff", "yag", prefix="GREE_"
+    "generic", "yan", "yaa", "yac", "yac1fb9", "yx1ff", "yag", "yag1fb3", prefix="GREE_"
 )
 
 CONFIG_SCHEMA = climate_ir.climate_ir_with_receiver_schema(GreeClimate).extend(
