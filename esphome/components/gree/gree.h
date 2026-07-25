@@ -24,6 +24,8 @@ static constexpr uint8_t GREE_FAN_AUTO = 0x00;
 static constexpr uint8_t GREE_FAN_1 = 0x10;
 static constexpr uint8_t GREE_FAN_2 = 0x20;
 static constexpr uint8_t GREE_FAN_3 = 0x30;
+static constexpr uint8_t GREE_FAN_4 = 0x40;  // FINNS EJ
+static constexpr uint8_t GREE_FAN_5 = 0x50;  // FINNS EJ
 
 // IR Transmission
 static constexpr uint32_t GREE_IR_FREQUENCY = 38000;
@@ -97,10 +99,12 @@ class GreeClimate final : public climate_ir::ClimateIR {
 
   void set_model(Model model);
   void set_mode_bit(uint8_t bit_mask, bool enabled);
+  uint8_t get_mode_bits();
 
  protected:
   // Transmit via IR the state of this climate controller.
   void transmit_state() override;
+  climate::ClimateTraits traits() override;
 
   bool on_receive(remote_base::RemoteReceiveData data) override;
 
@@ -122,8 +126,13 @@ class GreeClimate final : public climate_ir::ClimateIR {
   uint8_t preset_();
 
   Model model_{};
+  // Combined mode bits for remote_state[2] (burst 1) / remote_state[3] (burst 2)
   uint8_t mode_bits_{GREE_MODE_BIT_LIGHT};  // The display light is on until a switch says otherwise
+  uint8_t quiet_bits_{0};
   uint8_t last_sent_temp_{0};
+
+  uint32_t last_transmission_{0};
+  uint32_t last_receive_{0};
 };
 
 }  // namespace esphome::gree
