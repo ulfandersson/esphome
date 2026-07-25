@@ -10,6 +10,16 @@ void GreeModeBitSwitch::setup() {
   if (initial.has_value()) {
     this->write_state(*initial);
   }
+  this->parent_->add_on_state_callback([this](climate::Climate &device) {
+    bool new_state = this->parent_->get_mode_bits() & this->bit_mask_;
+
+    ESP_LOGI("gree.switch", "New state %s: %i", this->name_, new_state);
+
+    if (new_state != this->state) {
+      this->state = new_state;
+      this->publish_state(new_state);
+    }
+  });
 }
 
 void GreeModeBitSwitch::dump_config() { log_switch(TAG, "  ", this->name_, this); }

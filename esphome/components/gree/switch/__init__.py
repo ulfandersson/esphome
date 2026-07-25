@@ -14,6 +14,7 @@ GreeModeBitSwitch = gree_ns.class_("GreeModeBitSwitch", switch.Switch, cg.Compon
 CONF_TURBO = "turbo"
 CONF_HEALTH = "health"
 CONF_XFAN = "xfan"
+CONF_SCAVENGE = "scavenge"
 CONF_GREE_ID = "gree_id"
 
 # Switch configurations: (config_key, display_name, bit_mask, icon)
@@ -22,6 +23,7 @@ SWITCH_CONFIGS = (
     (CONF_LIGHT, "Gree Light Switch", 0x20, "mdi:led-outline"),
     (CONF_HEALTH, "Gree Health Switch", 0x40, "mdi:pine-tree"),
     (CONF_XFAN, "Gree X-FAN Switch", 0x80, "mdi:wall-sconce-flat"),
+    (CONF_SCAVENGE, "Gree Scavenge Switch", 0x01, "mdi:weather-windy"),
 )
 
 SUPPORTED_MODELS = {
