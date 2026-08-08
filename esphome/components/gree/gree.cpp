@@ -88,17 +88,17 @@ void GreeClimate::transmit_state() {
 
   if (this->model_ == GREE_YAN || this->model_ == GREE_YX1FF || this->model_ == GREE_YAG ||
       this->model_ == GREE_YAG1FB3) {
-    remote_state[4] = this->vertical_swing_();
+    remote_state[4] = this->get_vertical_swing();
   }
 
   if (this->model_ == GREE_YAG || this->model_ == GREE_YAG1FB3) {
-    if (this->vertical_swing_() == GREE_VDIR_SWING || this->horizontal_swing_() == GREE_HDIR_SWING) {
+    if (this->get_vertical_swing() == GREE_VDIR_SWING || this->get_horizontal_swing() == GREE_HDIR_SWING) {
       remote_state[0] |= (1 << 6);
     }
   }
 
   if (this->model_ == GREE_YAC || this->model_ == GREE_YAG || this->model_ == GREE_YAG1FB3) {
-    remote_state[4] |= (this->horizontal_swing_() << 4);
+    remote_state[4] |= (this->get_horizontal_swing() << 4);
   }
 
   if (this->model_ == GREE_YAG) {
@@ -117,10 +117,10 @@ void GreeClimate::transmit_state() {
   if (this->model_ == GREE_YAA || this->model_ == GREE_YAC || this->model_ == GREE_YAC1FB9) {
     remote_state[6] = 0x20;  // YAA1FB, FAA1FB1, YB1F2 bits 4..7 always 0010
 
-    if (this->vertical_swing_() == GREE_VDIR_SWING) {
+    if (this->get_vertical_swing() == GREE_VDIR_SWING) {
       remote_state[0] |= (1 << 6);  // Enable swing by setting bit 6
-    } else if (this->vertical_swing_() != GREE_VDIR_AUTO) {
-      remote_state[5] = this->vertical_swing_();
+    } else if (this->get_vertical_swing() != GREE_VDIR_AUTO) {
+      remote_state[5] = this->get_vertical_swing();
     }
   }
 
@@ -357,23 +357,51 @@ uint8_t GreeClimate::fan_speed_() {
   }
 }
 
-uint8_t GreeClimate::horizontal_swing_() {
+void GreeClimate::set_horizontal_swing(uint8_t horizontal_swing) {
+  this->gree_horizontal_swing_ = horizontal_swing;
+  this->sync_swing_mode();
+  this->transmit_state();
+}
+
+void GreeClimate::set_vertical_swing(uint8_t vertical_swing) {
+  this->gree_vertical_swing_ = vertical_swing;
+  this->sync_swing_mode();
+  this->transmit_state();
+}
+
+void GreeClimate::sync_swing_mode() {
+  bool horizontal_auto = this->gree_horizontal_swing_ == 1;
+  bool vertical_auto = this->gree_vertical_swing_ == 1;
+
+  if (horizontal_auto && vertical_auto) {
+    this->swing_mode = climate::CLIMATE_SWING_BOTH;
+  } else if (horizontal_auto) {
+    this->swing_mode = climate::CLIMATE_SWING_HORIZONTAL;
+  } else if (vertical_auto) {
+    this->swing_mode = climate::CLIMATE_SWING_VERTICAL;
+  } else {
+    this->swing_mode = climate::CLIMATE_SWING_OFF;
+  }
+  this->publish_state();
+}
+
+uint8_t GreeClimate::get_horizontal_swing() {
   switch (this->swing_mode) {
     case climate::CLIMATE_SWING_HORIZONTAL:
     case climate::CLIMATE_SWING_BOTH:
       return GREE_HDIR_SWING;
     default:
-      return GREE_HDIR_MANUAL;
+      return this->gree_horizontal_swing_;
   }
 }
 
-uint8_t GreeClimate::vertical_swing_() {
+uint8_t GreeClimate::get_vertical_swing() {
   switch (this->swing_mode) {
     case climate::CLIMATE_SWING_VERTICAL:
     case climate::CLIMATE_SWING_BOTH:
       return GREE_VDIR_SWING;
     default:
-      return GREE_VDIR_MANUAL;
+      return this->gree_vertical_swing_;
   }
 }
 
@@ -707,26 +735,14 @@ void GreeClimate::import_state_(uint8_t *remote_state) {
       break;
   }
 
-  // 4. Decode Vertical and Horizontal Swing
-  // Vertical swing is stored in remote_state[0], bit 6
-  // Horizontal swing is stored in remote_state[4], bit 0
-  // TODO WROONG
-  uint8_t v_swing = (remote_state[4] >> 0) & 0x0F;
-  uint8_t h_swing = (remote_state[4] >> 4) & 0x0F;
+  this->gree_vertical_swing_ = (remote_state[4] >> 0) & 0x0F;
+  this->gree_horizontal_swing_ = (remote_state[4] >> 4) & 0x0F;
+  this->sync_swing_mode();
 
-  if (v_swing == GREE_VDIR_SWING && h_swing == GREE_HDIR_SWING) {
-    this->swing_mode = climate::CLIMATE_SWING_BOTH;
-  } else if (v_swing == GREE_VDIR_SWING) {
-    this->swing_mode = climate::CLIMATE_SWING_VERTICAL;
-  } else if (h_swing == GREE_HDIR_SWING) {
-    this->swing_mode = climate::CLIMATE_SWING_HORIZONTAL;
-  } else {
-    this->swing_mode = climate::CLIMATE_SWING_OFF;
-  }
-
-  ESP_LOGI(TAG, "Imported state - Mode: %d, Temp: %.1fC, Fan: %d, Swing: %d", static_cast<int>(this->mode),
-           this->target_temperature, static_cast<int>(this->fan_mode.value_or(climate::CLIMATE_FAN_AUTO)),
-           static_cast<int>(this->swing_mode));
+  ESP_LOGI(TAG, "Imported state - Mode: %d, Temp: %.1fC, Fan: %d, V Swing: %d, H Swing: %d",
+           static_cast<int>(this->mode), this->target_temperature,
+           static_cast<int>(this->fan_mode.value_or(climate::CLIMATE_FAN_AUTO)),
+           static_cast<int>(this->gree_vertical_swing_), static_cast<int>(this->gree_horizontal_swing_));
 }
 
 }  // namespace esphome::gree
