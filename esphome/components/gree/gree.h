@@ -101,6 +101,12 @@ class GreeClimate final : public climate_ir::ClimateIR {
   void set_mode_bit(uint8_t bit_mask, bool enabled);
   uint8_t get_mode_bits();
 
+  void set_vertical_swing(uint8_t vertical_swing);
+  void set_horizontal_swing(uint8_t horizontal_swing);
+
+  uint8_t get_horizontal_swing();
+  uint8_t get_vertical_swing();
+
  protected:
   // Transmit via IR the state of this climate controller.
   void transmit_state() override;
@@ -120,12 +126,17 @@ class GreeClimate final : public climate_ir::ClimateIR {
 
   uint8_t operation_mode_();
   uint8_t fan_speed_();
-  uint8_t horizontal_swing_();
-  uint8_t vertical_swing_();
   uint8_t temperature_();
   uint8_t preset_();
 
   Model model_{};
+
+ private:
+  uint8_t gree_vertical_swing_{0};
+  uint8_t gree_horizontal_swing_{0};
+
+  void sync_swing_mode();
+
   // Combined mode bits for remote_state[2] (burst 1) / remote_state[3] (burst 2)
   uint8_t mode_bits_{GREE_MODE_BIT_LIGHT};  // The display light is on until a switch says otherwise
   uint8_t quiet_bits_{0};
