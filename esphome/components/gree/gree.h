@@ -126,6 +126,8 @@ class GreeClimate final : public climate_ir::ClimateIR {
   Model model_{};
 
  private:
+  void do_transmit_state();
+
   uint8_t gree_vertical_swing_{0};
   uint8_t gree_horizontal_swing_{0};
 

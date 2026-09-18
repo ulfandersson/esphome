@@ -61,6 +61,13 @@ void GreeClimate::set_mode_bit(uint8_t bit_mask, bool enabled) {
 uint8_t GreeClimate::get_mode_bits() { return this->mode_bits_; }
 
 void GreeClimate::transmit_state() {
+  this->set_timeout("transmit_debounce", 100, [this]() {
+    ESP_LOGI(TAG, "Transmitting state");
+    this->do_transmit_state();
+  });
+}
+
+void GreeClimate::do_transmit_state() {
   uint8_t remote_state[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00};
 
   remote_state[0] = this->fan_speed_() | this->operation_mode_();
