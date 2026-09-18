@@ -101,6 +101,8 @@ class GreeClimate final : public climate_ir::ClimateIR {
   void set_mode_bit(uint8_t bit_mask, bool enabled);
   uint8_t get_mode_bits();
 
+  void set_transmit_debounce(bool debounce) { this->transmit_debounce_ = debounce; }
+
   void set_vertical_swing(uint8_t vertical_swing);
   void set_horizontal_swing(uint8_t horizontal_swing);
 
@@ -132,6 +134,10 @@ class GreeClimate final : public climate_ir::ClimateIR {
   Model model_{};
 
  private:
+  bool transmit_debounce_{false};
+
+  void do_transmit_state();
+
   uint8_t gree_vertical_swing_{0};
   uint8_t gree_horizontal_swing_{0};
 

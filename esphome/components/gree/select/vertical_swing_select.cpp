@@ -2,11 +2,14 @@
 
 namespace esphome::gree {
 
+ESPHOME_LOG_TAG(TAG, "gree.vertical_swing");
+
 void GreeVerticalSwingSelect::setup() {
   this->parent_->add_on_state_callback([this](climate::Climate &device) {
     uint8_t new_state = this->parent_->get_vertical_swing();
 
     if (new_state != this->active_index().value_or(-1)) {
+      ESP_LOGI(TAG, "New state: %i", new_state);
       this->publish_state(new_state);
     }
   });

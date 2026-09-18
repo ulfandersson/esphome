@@ -16,9 +16,12 @@ MODELS = Model.options(
     "generic", "yan", "yaa", "yac", "yac1fb9", "yx1ff", "yag", "yag1fb3", prefix="GREE_"
 )
 
+CONF_TRANSMIT_DEBOUNCE = "transmit_debounce"
+
 CONFIG_SCHEMA = climate_ir.climate_ir_with_receiver_schema(GreeClimate).extend(
     {
         cv.Required(CONF_MODEL): cv.enum(MODELS, lower=True),
+        cv.Optional(CONF_TRANSMIT_DEBOUNCE, default=False): cv.boolean,
     }
 )
 
@@ -26,3 +29,4 @@ CONFIG_SCHEMA = climate_ir.climate_ir_with_receiver_schema(GreeClimate).extend(
 async def to_code(config: ConfigType) -> None:
     var = await climate_ir.new_climate_ir(config)
     cg.add(var.set_model(config[CONF_MODEL]))
+    cg.add(var.set_transmit_debounce(config[CONF_TRANSMIT_DEBOUNCE]))

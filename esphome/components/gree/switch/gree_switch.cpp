@@ -13,9 +13,8 @@ void GreeModeBitSwitch::setup() {
   this->parent_->add_on_state_callback([this](climate::Climate &device) {
     bool new_state = this->parent_->get_mode_bits() & this->bit_mask_;
 
-    ESP_LOGI(TAG, "New state %s: %i", this->name_, new_state);
-
     if (new_state != this->state) {
+      ESP_LOGI(TAG, "New state %s: %i", this->name_, new_state);
       this->state = new_state;
       this->publish_state(new_state);
     }

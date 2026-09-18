@@ -5,6 +5,9 @@ namespace esphome::gree {
 
 ESPHOME_LOG_TAG(TAG, "gree.climate");
 
+static constexpr uint32_t TRANSMIT_TIMEOUT_ID = 0;
+static constexpr uint32_t IFEEL_INTERVAL_ID = 1;
+
 climate::ClimateTraits GreeClimate::traits() {
   auto t = climate_ir::ClimateIR::traits();
 
@@ -20,7 +23,7 @@ void GreeClimate::setup() {
   climate_ir::ClimateIR::setup();
 
   if (this->sensor_ != nullptr) {
-    this->set_interval("gree_ifeel_timer", 300000, [this]() { this->send_ifeel_ping_(true); });
+    this->set_interval(IFEEL_INTERVAL_ID, 300000, [this]() { this->send_ifeel_ping_(true); });
 
     this->sensor_->add_on_state_callback([this](float value) { this->send_ifeel_ping_(false); });
   }
@@ -56,6 +59,17 @@ void GreeClimate::set_mode_bit(uint8_t bit_mask, bool enabled) {
 uint8_t GreeClimate::get_mode_bits() { return this->mode_bits_; }
 
 void GreeClimate::transmit_state() {
+  if (this->transmit_debounce_) {
+    ESP_LOGV(TAG, "Debouncing transmit of state");
+    this->set_timeout(TRANSMIT_TIMEOUT_ID, 100, [this]() { this->do_transmit_state(); });
+  } else {
+    this->do_transmit_state();
+  }
+}
+
+void GreeClimate::do_transmit_state() {
+  ESP_LOGV(TAG, "Transmitting state");
+
   uint8_t remote_state[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00};
   const Model model = this->model_;
 
@@ -424,6 +438,7 @@ uint8_t GreeClimate::get_sensor_temp_() {
   float current_temp = this->sensor_->get_state();
   uint8_t temp_val = (uint8_t) roundf(current_temp);
 
+  // TODO: Handle sub-16 temps
   temp_val = clamp(temp_val, (uint8_t) GREE_TEMP_MIN, (uint8_t) GREE_TEMP_MAX);
 
   return temp_val;
