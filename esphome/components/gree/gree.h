@@ -6,8 +6,9 @@ namespace esphome::gree {
 
 // Values for GREE IR Controllers
 // Temperature
-static constexpr uint8_t GREE_TEMP_MIN = 16;  // Celsius
-static constexpr uint8_t GREE_TEMP_MAX = 30;  // Celsius
+static constexpr uint8_t GREE_TEMP_MIN = 16;     // Celsius
+static constexpr uint8_t GREE_TEMP_MAX = 30;     // Celsius
+static constexpr uint8_t GREE_LOW_TEMP_MIN = 8;  // Celsius
 
 // Modes
 static constexpr uint8_t GREE_MODE_AUTO = 0x00;
@@ -24,8 +25,6 @@ static constexpr uint8_t GREE_FAN_AUTO = 0x00;
 static constexpr uint8_t GREE_FAN_1 = 0x10;
 static constexpr uint8_t GREE_FAN_2 = 0x20;
 static constexpr uint8_t GREE_FAN_3 = 0x30;
-static constexpr uint8_t GREE_FAN_4 = 0x40;  // FINNS EJ
-static constexpr uint8_t GREE_FAN_5 = 0x50;  // FINNS EJ
 
 // IR Transmission
 static constexpr uint32_t GREE_IR_FREQUENCY = 38000;
@@ -44,6 +43,8 @@ static constexpr uint32_t GREE_YAC_BIT_MARK = 650;
 // Timing specific to YAC1FB9
 static constexpr uint32_t GREE_YAC1FB9_HEADER_SPACE = 4500;
 static constexpr uint32_t GREE_YAC1FB9_MESSAGE_SPACE = 19980;
+
+static constexpr uint32_t GREE_INTER_BURST_SPACE = 30000;
 
 // State Frame size
 static constexpr uint8_t GREE_STATE_FRAME_SIZE = 8;
@@ -101,15 +102,18 @@ class GreeClimate final : public climate_ir::ClimateIR {
   void set_mode_bit(uint8_t bit_mask, bool enabled);
   uint8_t get_mode_bits();
 
-  void set_transmit_debounce(bool debounce) { this->transmit_debounce_ = debounce; }
-
   void set_vertical_swing(uint8_t vertical_swing);
   void set_horizontal_swing(uint8_t horizontal_swing);
 
   uint8_t get_horizontal_swing();
   uint8_t get_vertical_swing();
 
+  void set_transmit_debounce(bool debounce) { this->transmit_debounce_ = debounce; }
+
  protected:
+  static constexpr const char *FAN_MEDIUM_LOW = "Medium Low";
+  static constexpr const char *FAN_MEDIUM_HIGH = "Medium High";
+
   // Transmit via IR the state of this climate controller.
   void transmit_state() override;
   climate::ClimateTraits traits() override;
@@ -117,6 +121,8 @@ class GreeClimate final : public climate_ir::ClimateIR {
   bool on_receive(remote_base::RemoteReceiveData data) override;
 
   void import_state_(uint8_t *remote_state);
+
+  uint8_t calculate_checksum_(const uint8_t *remote_state) const;
 
   void encodeData_(remote_base::RemoteTransmitData *data, uint8_t *remote_state);
 
@@ -133,7 +139,6 @@ class GreeClimate final : public climate_ir::ClimateIR {
 
   Model model_{};
 
- private:
   bool transmit_debounce_{false};
 
   void do_transmit_state();

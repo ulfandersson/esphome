@@ -14,7 +14,7 @@ climate::ClimateTraits GreeClimate::traits() {
   if (this->model_ == GREE_YAG1FB3) {
     t.set_supported_presets({climate::CLIMATE_PRESET_NONE, climate::CLIMATE_PRESET_ECO});
 
-    set_supported_custom_fan_modes({"Medium Low", "Medium High"});
+    set_supported_custom_fan_modes({FAN_MEDIUM_LOW, FAN_MEDIUM_HIGH});
   }
   return t;
 }
@@ -41,7 +41,7 @@ void GreeClimate::set_model(Model model) {
     this->presets_.insert(climate::CLIMATE_PRESET_SLEEP);  // YX1FF sleep mode
   }
   if (model == GREE_YAG1FB3) {
-    this->minimum_temperature_ = 8;
+    this->minimum_temperature_ = GREE_LOW_TEMP_MIN;
   }
 
   this->model_ = model;
@@ -148,11 +148,7 @@ void GreeClimate::do_transmit_state() {
   if (model == GREE_YAN || model == GREE_YX1FF) {
     remote_state[7] = ((remote_state[0] << 4) + (remote_state[1] << 4) + 0xC0);
   } else {
-    remote_state[7] =
-        ((((remote_state[0] & 0x0F) + (remote_state[1] & 0x0F) + (remote_state[2] & 0x0F) + (remote_state[3] & 0x0F) +
-           ((remote_state[4] & 0xF0) >> 4) + ((remote_state[5] & 0xF0) >> 4) + ((remote_state[6] & 0xF0) >> 4) + 0x0A) &
-          0x0F)
-         << 4);
+    remote_state[7] = this->calculate_checksum_(remote_state);
   }
   if (model == GREE_YAG1FB3) {
     if (this->preset.value() == climate::CLIMATE_PRESET_ECO && this->mode == climate::CLIMATE_MODE_COOL) {
@@ -167,16 +163,17 @@ void GreeClimate::do_transmit_state() {
   this->encodeData_(data, remote_state);
 
   if (model == GREE_YAG1FB3) {
-    data->space(30000);
+    data->space(GREE_INTER_BURST_SPACE);
 
+    // Burst 2 - index 0,1,2 remains unchanged
     remote_state[3] = 0x70 & (this->mode_bits_ & 0x01);
     remote_state[4] = this->quiet_bits_;
     remote_state[5] = 0x00;
 
     uint8_t fan_value_b2 = 0x00;
-    if (this->get_custom_fan_mode() == "Medium Low") {
+    if (this->get_custom_fan_mode() == FAN_MEDIUM_LOW) {
       fan_value_b2 = 2;
-    } else if (this->get_custom_fan_mode() == "Medium High") {
+    } else if (this->get_custom_fan_mode() == FAN_MEDIUM_HIGH) {
       fan_value_b2 = 4;
     } else {
       switch (this->fan_mode.value()) {
@@ -196,27 +193,18 @@ void GreeClimate::do_transmit_state() {
     }
 
     remote_state[6] = (fan_value_b2 << 4);
-    remote_state[7] =
-        ((((remote_state[0] & 0x0F) + (remote_state[1] & 0x0F) + (remote_state[2] & 0x0F) + (remote_state[3] & 0x0F) +
-           ((remote_state[4] & 0xF0) >> 4) + ((remote_state[5] & 0xF0) >> 4) + ((remote_state[6] & 0xF0) >> 4) + 0x0A) &
-          0x0F)
-         << 4);
+    remote_state[7] = this->calculate_checksum_(remote_state);
     this->encodeData_(data, remote_state);
 
-    data->space(30000);
+    data->space(GREE_INTER_BURST_SPACE);
 
-    //--- SEKVENSSIGNAL 3 (Totalt 139 tidsvärden) ---
-    // Header-pulser: Mark = 9048 µs, Space = -4434 µs
-    // Frame A (35 bitar): ['0x00', '0x00', '0x00', '0xA0', '0x02']
-    // Frame B (32 bitar): ['0x00', '0x00', '0x00', '0xA0']
+    // Burst 3
     remote_state[0] = 0x00;
     remote_state[1] = 0x00;
-    if (this->target_temperature < 16.0f) {
-      int temp_int = static_cast<int>(this->target_temperature);
-
-      if (temp_int >= 8 && temp_int <= 15) {
-        uint8_t shift_value = (15 - temp_int) << 4;
-        remote_state[2] = 0x80 - shift_value;
+    int temp_int = static_cast<int>(this->target_temperature);
+    if (temp_int < GREE_TEMP_MIN) {
+      if (temp_int >= GREE_LOW_TEMP_MIN) {
+        remote_state[2] = 0x80 - ((GREE_TEMP_MIN - 1 - temp_int) << 4);
       }
     } else {
       remote_state[2] = 0x00;
@@ -231,7 +219,7 @@ void GreeClimate::do_transmit_state() {
     uint8_t temp_val = this->get_sensor_temp_();
     if (temp_val > 0) {
       // TODO actual delay before ifeel paket
-      data->space(30000);
+      data->space(GREE_INTER_BURST_SPACE);
 
       this->encodeIFeel_(data, temp_val);
     }
@@ -322,10 +310,10 @@ uint8_t GreeClimate::fan_speed_() {
       case climate::CLIMATE_FAN_MEDIUM:
         return GREE_FAN_3;
       default:
-        if (this->get_custom_fan_mode() == "Medium Low") {
+        if (this->get_custom_fan_mode() == FAN_MEDIUM_LOW) {
           return GREE_FAN_2;
         }
-        if (this->get_custom_fan_mode() == "Medium High") {
+        if (this->get_custom_fan_mode() == FAN_MEDIUM_HIGH) {
           return GREE_FAN_3;
         }
         return GREE_FAN_AUTO;
@@ -410,6 +398,13 @@ uint8_t GreeClimate::get_vertical_swing() {
   }
 }
 
+uint8_t GreeClimate::calculate_checksum_(const uint8_t *remote_state) const {
+  uint8_t sum = (remote_state[0] & 0x0F) + (remote_state[1] & 0x0F) + (remote_state[2] & 0x0F) +
+                (remote_state[3] & 0x0F) + ((remote_state[4] & 0xF0) >> 4) + ((remote_state[5] & 0xF0) >> 4) +
+                ((remote_state[6] & 0xF0) >> 4) + 0x0A;
+  return (sum & 0x0F) << 4;
+}
+
 uint8_t GreeClimate::temperature_() {
   return (uint8_t) roundf(clamp<float>(this->target_temperature, GREE_TEMP_MIN, GREE_TEMP_MAX)) - GREE_TEMP_MIN;
 }
@@ -438,8 +433,8 @@ uint8_t GreeClimate::get_sensor_temp_() {
   float current_temp = this->sensor_->get_state();
   uint8_t temp_val = (uint8_t) roundf(current_temp);
 
-  // TODO: Handle sub-16 temps
-  temp_val = clamp(temp_val, (uint8_t) GREE_TEMP_MIN, (uint8_t) GREE_TEMP_MAX);
+  uint8_t min_temp_val = this->model_ == GREE_YAG1FB3 ? GREE_LOW_TEMP_MIN : GREE_TEMP_MIN;
+  temp_val = clamp<uint8_t>(temp_val, min_temp_val, GREE_TEMP_MAX);
 
   return temp_val;
 }
@@ -451,7 +446,7 @@ void GreeClimate::send_ifeel_ping_(bool force) {
     return;
   }
 
-  ESP_LOGI("gree.climate", "Sending iFeel temperature %i", temp_val);
+  ESP_LOGI(TAG, "Sending iFeel temperature %i", temp_val);
 
   this->last_sent_temp_ = temp_val;
 
@@ -467,15 +462,15 @@ void GreeClimate::send_ifeel_ping_(bool force) {
 void GreeClimate::encodeIFeel_(remote_base::RemoteTransmitData *data, uint8_t temperature) {
   data->reserve(35);
 
-  data->mark(GREE_YAC_HEADER_MARK);  // or 6100?
+  data->mark(GREE_YAC_HEADER_MARK);
   data->space(GREE_YAC_HEADER_SPACE);
 
   for (int i = 0; i < 8; i++) {
-    data->mark(GREE_YAC_BIT_MARK);  // or 680?
+    data->mark(GREE_YAC_BIT_MARK);
     if ((temperature >> i) & 1) {
-      data->space(GREE_ONE_SPACE);  // or 1630?
+      data->space(GREE_ONE_SPACE);
     } else {
-      data->space(GREE_ZERO_SPACE);  // or 530?
+      data->space(GREE_ZERO_SPACE);
     }
   }
 
@@ -495,6 +490,7 @@ void GreeClimate::encodeIFeel_(remote_base::RemoteTransmitData *data, uint8_t te
 bool GreeClimate::on_receive(remote_base::RemoteReceiveData data) {
   uint32_t now = millis();
   if (now - this->last_transmission_ < 700) {
+    // Most likely our own transmission picked up by the receiver - ignore
     return false;
   }
   this->last_receive_ = now;
@@ -504,7 +500,7 @@ bool GreeClimate::on_receive(remote_base::RemoteReceiveData data) {
   // ==========================================================================
   if (data.expect_item(GREE_HEADER_MARK, GREE_HEADER_SPACE) ||
       data.expect_item(GREE_HEADER_MARK, GREE_YAC1FB9_HEADER_SPACE)) {
-    ESP_LOGD(TAG, "Gree Header detected! Starting climate command decoding...");
+    ESP_LOGV(TAG, "Gree Header detected! Starting climate command decoding...");
 
     uint8_t remote_state[8] = {0};
 
@@ -564,16 +560,11 @@ bool GreeClimate::on_receive(remote_base::RemoteReceiveData data) {
       return false;
     }
 
-    // 6. Verify the checksum (Last 4 bits in byte 7)
-    // Formula: (Byte 0 + Byte 1 + Byte 2 + Byte 3 + Byte 4 + Byte 5 + Byte 6 + 0x0A) & 0x0F
-    uint8_t calculated_checksum =
-        ((((remote_state[0] & 0x0F) + (remote_state[1] & 0x0F) + (remote_state[2] & 0x0F) + (remote_state[3] & 0x0F) +
-           ((remote_state[4] & 0xF0) >> 4) + ((remote_state[5] & 0xF0) >> 4) + ((remote_state[6] & 0xF0) >> 4) + 0x0A) &
-          0x0F)
-         << 4);
+    // 6. Verify the checksum
+    uint8_t calculated_checksum = this->calculate_checksum_(remote_state);
     uint8_t received_checksum = remote_state[7] & 0xF0;
 
-    ESP_LOGI(TAG, "remote state 0: 0x%01X, 1: 0x%01X, 2: 0x%01X, 3: 0x%01X, 4: 0x%01X, 5: 0x%01X, 6: 0x%01X, 7: 0x%01X",
+    ESP_LOGV(TAG, "remote state 0: 0x%01X, 1: 0x%01X, 2: 0x%01X, 3: 0x%01X, 4: 0x%01X, 5: 0x%01X, 6: 0x%01X, 7: 0x%01X",
              remote_state[0], remote_state[1], remote_state[2], remote_state[3], remote_state[4], remote_state[5],
              remote_state[6], remote_state[7]);
 
@@ -583,8 +574,13 @@ bool GreeClimate::on_receive(remote_base::RemoteReceiveData data) {
       return false;
     }
 
+    if (this->model_ != GREE_YAG1FB3) {
+      // TODO: Code below is only verified against YAG1FB3
+      return false;
+    }
+
     if ((remote_state[3] & 0xF0) == 0x70) {
-      ESP_LOGI(TAG, "Burst 2 - scavenge");
+      ESP_LOGV(TAG, "Burst 2/3");
       this->mode_bits_ = (this->mode_bits_ & 0xF0) | (remote_state[3] & 0x0F);
       this->quiet_bits_ = remote_state[4];
 
@@ -595,13 +591,13 @@ bool GreeClimate::on_receive(remote_base::RemoteReceiveData data) {
           this->set_fan_mode_(climate::CLIMATE_FAN_LOW);
           break;
         case 2:
-          this->set_custom_fan_mode_("Medium Low");
+          this->set_custom_fan_mode_(FAN_MEDIUM_LOW);
           break;
         case 3:
           this->set_fan_mode_(climate::CLIMATE_FAN_MEDIUM);
           break;
         case 4:
-          this->set_custom_fan_mode_("Medium High");
+          this->set_custom_fan_mode_(FAN_MEDIUM_HIGH);
           break;
         case 5:
           this->set_fan_mode_(climate::CLIMATE_FAN_HIGH);
@@ -610,21 +606,23 @@ bool GreeClimate::on_receive(remote_base::RemoteReceiveData data) {
           break;
       }
 
+      ESP_LOGI(TAG, " - Mode bits: %d, Quiet bits: %d, Fan: %d", static_cast<int>(this->mode_bits_),
+               static_cast<int>(this->quiet_bits_), static_cast<int>(fan_step));
+
     } else if (remote_state[3] == 0xA0) {
-      ESP_LOGI(TAG, "Burst 3 - handle low temp");
+      ESP_LOGV(TAG, "Burst 3/3");
       if (remote_state[7] == 0xA0) {
         uint8_t low_temp = (remote_state[2] & 0xF0) >> 4;
-        if (low_temp >= 1 && low_temp <= 8) {
-          this->target_temperature = 7 + low_temp;
+        if (low_temp >= 1 && low_temp <= GREE_TEMP_MIN - GREE_LOW_TEMP_MIN) {
+          this->target_temperature = GREE_LOW_TEMP_MIN - 1 + low_temp;
+
+          ESP_LOGI(TAG, " - Low temp: %.1fC", this->target_temperature);
         }
       }
 
       this->publish_state();
-
-      return true;
-
     } else {
-      ESP_LOGI(TAG, "Burst 1 - import state");
+      ESP_LOGV(TAG, "Burst 1/3");
       this->mode_bits_ = remote_state[2] & 0xF0;
       this->import_state_(remote_state);
     }
@@ -652,7 +650,7 @@ bool GreeClimate::on_receive(remote_base::RemoteReceiveData data) {
       }
     }
 
-    // 2. Read Byte 2 (Signature, expected to be 0xA5)
+    // 2. Read Byte 2 (Signature)
     for (int bit_idx = 0; bit_idx < 8; bit_idx++) {
       if (!data.expect_mark(GREE_YAC_BIT_MARK))
         return false;
@@ -668,15 +666,14 @@ bool GreeClimate::on_receive(remote_base::RemoteReceiveData data) {
       return false;
     }
 
-    // 4. Verify that the signature is exactly 0xA5
+    // 4. Verify signature
     if (signature != 0xA5) {
       ESP_LOGW(TAG, "iFeel decoding failed: Incorrect signature (0x%02X instead of 0xA5)", signature);
       return false;
     }
 
-    ESP_LOGI(TAG, "Received valid iFeel ping! Room temperature reported from remote: %d°C", temp_val);
+    ESP_LOGI(TAG, "iFeel temperature reported from remote: %d°C", temp_val);
 
-    // Optional: If you want to write the temperature to a sensor or log in Home Assistant
     return false;
   }
 
@@ -686,12 +683,11 @@ bool GreeClimate::on_receive(remote_base::RemoteReceiveData data) {
 
 void GreeClimate::import_state_(uint8_t *remote_state) {
   bool is_on = (remote_state[0] & GREE_MODE_ON) != 0;
-  uint8_t mode_bits = remote_state[0] & 0x07;
 
   if (!is_on) {
     this->mode = climate::CLIMATE_MODE_OFF;
   } else {
-    switch (mode_bits) {
+    switch (remote_state[0] & 0x07) {
       case GREE_MODE_AUTO:
         this->mode = climate::CLIMATE_MODE_HEAT_COOL;
         break;
@@ -731,7 +727,7 @@ void GreeClimate::import_state_(uint8_t *remote_state) {
       this->set_fan_mode_(climate::CLIMATE_FAN_LOW);
       break;
     case GREE_FAN_2:
-      this->set_custom_fan_mode_("Medium Low");
+      this->set_custom_fan_mode_(FAN_MEDIUM_LOW);
       break;
     case GREE_FAN_3:
       this->set_fan_mode_(climate::CLIMATE_FAN_MEDIUM);
