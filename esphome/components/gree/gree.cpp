@@ -457,6 +457,7 @@ void GreeClimate::send_ifeel_ping_(bool force) {
   this->encodeIFeel_(data, temp_val);
 
   transmit.perform();
+  this->last_transmission_ = millis();
 }
 
 void GreeClimate::encodeIFeel_(remote_base::RemoteTransmitData *data, uint8_t temperature) {
@@ -493,7 +494,6 @@ bool GreeClimate::on_receive(remote_base::RemoteReceiveData data) {
     // Most likely our own transmission picked up by the receiver - ignore
     return false;
   }
-  this->last_receive_ = now;
 
   // ==========================================================================
   // PATH 1: SEARCH FOR STANDARD GREE COMMAND (67 bits divided across two blocks)
@@ -564,7 +564,7 @@ bool GreeClimate::on_receive(remote_base::RemoteReceiveData data) {
     uint8_t calculated_checksum = this->calculate_checksum_(remote_state);
     uint8_t received_checksum = remote_state[7] & 0xF0;
 
-    ESP_LOGV(TAG, "remote state 0: 0x%01X, 1: 0x%01X, 2: 0x%01X, 3: 0x%01X, 4: 0x%01X, 5: 0x%01X, 6: 0x%01X, 7: 0x%01X",
+    ESP_LOGD(TAG, "remote state 0: 0x%01X, 1: 0x%01X, 2: 0x%01X, 3: 0x%01X, 4: 0x%01X, 5: 0x%01X, 6: 0x%01X, 7: 0x%01X",
              remote_state[0], remote_state[1], remote_state[2], remote_state[3], remote_state[4], remote_state[5],
              remote_state[6], remote_state[7]);
 

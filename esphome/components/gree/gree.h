@@ -85,6 +85,12 @@ static constexpr uint8_t GREE_MODE_BIT_LIGHT = 0x20;
 static constexpr uint8_t GREE_MODE_BIT_HEALTH = 0x40;
 static constexpr uint8_t GREE_MODE_BIT_XFAN = 0x80;
 
+// Quiet bits store in remote_state[4] bits 6..7 for YAG1FB3
+static constexpr uint8_t GREE_QUIET_OFF = 0x00;
+static constexpr uint8_t GREE_QUIET_AUTO = 0x40;
+static constexpr uint8_t GREE_QUIET_ON = 0x80;
+static constexpr uint8_t GREE_QUIET_MASK = 0xC0;
+
 // Model codes
 enum Model : uint8_t { GREE_GENERIC, GREE_YAN, GREE_YAA, GREE_YAC, GREE_YAC1FB9, GREE_YX1FF, GREE_YAG, GREE_YAG1FB3 };
 
@@ -150,11 +156,11 @@ class GreeClimate final : public climate_ir::ClimateIR {
 
   // Combined mode bits for remote_state[2] (burst 1) / remote_state[3] (burst 2)
   uint8_t mode_bits_{GREE_MODE_BIT_LIGHT};  // The display light is on until a switch says otherwise
-  uint8_t quiet_bits_{0};
+  uint8_t quiet_bits_{GREE_QUIET_OFF};
+
   uint8_t last_sent_temp_{0};
 
   uint32_t last_transmission_{0};
-  uint32_t last_receive_{0};
 };
 
 }  // namespace esphome::gree
